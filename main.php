@@ -12,6 +12,28 @@ use Discord\Parts\Interactions\Interaction;
 use Discord\Parts\Interactions\Command\Option;
 use Cvar1984\DiscordBot\Quran;
 
+function splitStringByCharacters($string, $maxCharacters = 2000) {
+    $characterCounter = 0;
+    $stringLength = strlen($string);
+    $currentString = '';
+    
+    for ($x = 0; $x < $stringLength; $x++) {
+      $currentString .= $string[$x];
+      $characterCounter++;
+  
+      if ($characterCounter >= $maxCharacters) {
+        $splitStrings[] = $currentString; // store the string
+        $characterCounter = 0; // reset flags
+        $currentString = ''; // reset string
+      }
+    }
+  
+    if (strlen($currentString) > 0) {
+      $splitStrings[] = $currentString;
+    }
+    return $splitStrings;
+  }
+
 $env = parse_ini_file('.env');
 $botToken = $env['BOT_TOKEN'];
 
@@ -38,19 +60,18 @@ $discord->on('ready', function (Discord $discord) {
             )
             ->toArray()
     );
+    $command = $discord->application->commands->create(
+        CommandBuilder::new()
+            ->setName('list_chapter')
+            ->setDescription('List all chapter')
+            ->toArray()
+    );
 
     //$discord->application->commands->save($command);
 
     /**
      * Listen Command
      */
-    $discord->listenCommand('debug', function (Interaction $interaction) {
-        $user = $interaction->data->resolved->users->first();
-        $userDebug = $interaction->data->resolved->users->toArray();
-        $userDebug = json_encode((array) $userDebug, JSON_PRETTY_PRINT);
-        $interaction->respondWithMessage(MessageBuilder::new()->setContent("Pong! {$user} ```{$userDebug}```"));
-
-    });
 
     $discord->listenCommand('list_verse_by_chapter', function (Interaction $interaction) {
         //var_dump($interaction->data);
@@ -59,10 +80,35 @@ $discord->on('ready', function (Discord $discord) {
         $terjemah = '';
 
         foreach($arrayResult as $result) {
-            $terjemah .= $result['id'] . PHP_EOL;
+            $terjemah .= "{$result['id']}\n\n";
         }
 
-        $interaction->respondWithMessage(MessageBuilder::new()->setContent("{$terjemah}"));
+        $terjemahSplit = splitStringByCharacters($terjemah);
+        $interaction->respondWithMessage(MessageBuilder::new()->setContent($terjemahSplit[0]));
+        $sizeOfTerjemahSplit = sizeof($terjemahSplit);
+
+        for($x = 1; $x < $sizeOfTerjemahSplit; $x++) {
+            $interaction->sendFollowUpMessage(MessageBuilder::new()->setContent($terjemahSplit[$x]));
+        }
+        /**
+        $chapterList = Quran::listChapter();
+        $chapterAudio = $chapterList[($chapter - 1)]['audio'];
+        $interaction->sendFollowUpMessage(MessageBuilder::new()->addFileFromContent("Chapter{$chapter}.mp3", file_get_contents($chapterAudio)));
+        */
+    });
+
+    $discord->listenCommand('list_chapter', function (Interaction $interaction) {
+        $chapterList = Quran::listChapter();
+        foreach($chapterList as $chapter) {
+            $list .= "{$chapter['nomor']}.{$chapter['nama']} - {$chapter['arti']}\n";
+        }
+        $splitList = splitStringByCharacters($list);
+        $interaction->respondWithMessage(MessageBuilder::new()->setContent($splitList[0])); // send first 2000 chars
+        $sizeOfSplitList = sizeof($splitList);
+        
+        for($x = 1; $x < $sizeOfSplitList; $x++) {
+            $interaction->sendFollowUpMessage(MessageBuilder::new()->setContent($splitList[$x])); // follow up the rest of the chars
+        }
     });
 
     /**
